@@ -1,4 +1,4 @@
-# 깔끔한 파이썬 탄탄
+# 깔끔한 파이썬 탄탄한 백엔드
 
 
 ![image](https://media.vlpt.us/images/arara90/post/a35d72a0-a6f9-4bd7-9adc-e516f3fd849c/%EA%B9%94%ED%8C%8C%ED%83%84%EB%B0%B1.jpg)
