@@ -101,20 +101,11 @@ async def timeline(user_id: int):
         return '사용자가 존재하지 않습니다', 400
     follow_list = app.users[user_id].get('follow', set())
     follow_list.add(user_id)
-    timeline = [tweet_str for tweet_str in app.tweets if tweet_str['user_id'] in follow_list]
+    timelines = [tweet_str for tweet_str in app.tweets if tweet_str['user_id'] in follow_list]
     return JSONResponse({
         'user_id': user_id,
-        'timeline': timeline
+        'timeline': timelines
     })
-
-
-
-
-
-
-
-
-
 
 # execute command in windows
 # uvicorn main:app --reload
