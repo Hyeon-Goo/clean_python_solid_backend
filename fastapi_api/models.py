@@ -33,3 +33,6 @@ class Tweets(Base):
     __tablename__ = "tweets_fast"
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = relationship("User", back_populates="id")
+    tweet = Column(String, nullable=False)
+    created_at = Column(TIMESTAMP, default=datetime.datetime.now())
+
