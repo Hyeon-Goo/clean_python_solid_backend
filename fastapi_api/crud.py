@@ -12,6 +12,10 @@ def get_user_by_name(db: Session, user_name: str):
     return db.query(models.User).get(models.User.name == user_name)
 
 
+def get_user_by_email(db: Session, email: str):
+    return db.query(models.User).get(models.User.email == email)
+
+
 def insert_user(db: Session, user: schema.UserCreate):
     db_user = models.User(
         name=user.name,

@@ -1,5 +1,13 @@
-from flask import Flask, request, jsonify, current_app
+import datetime
+from datetime import timedelta
+
+import jwt
+from functools import wraps
+
+import bcrypt
+from flask import Flask, request, jsonify, current_app, Response, g
 from flask.json import JSONEncoder
+from flask_cors import CORS
 from sqlalchemy import create_engine, text
 
 
@@ -8,6 +16,27 @@ class CustomJSONEncoder(JSONEncoder):
         if isinstance(o, set):
             return list(o)
         return JSONEncoder.default(self, o)
+
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        access_token = request.headers.get('Authorization')
+        if access_token is not None:
+            try:
+                payload = jwt.decode(access_token, current_app.config['JWT_SECRET_KEY'], 'HS256')
+            except jwt.InvalidTokenError:
+                payload = None
+            if payload is None:
+                return Response(status=401)
+
+            user_id = payload['user_id']
+            g.user_id = user_id
+            g.user = get_user(user_id) if user_id else None
+        else:
+            return Response(status=401)
+        return f(*args, **kwargs)
+    return decorated_function
 
 
 def get_user(user_id):
@@ -72,14 +101,38 @@ def create_app(test_config=None):
     def ping():
         return "pong"
 
+    @app.route("/login", methods=["POST"])
+    def login():
+        credential = request.json
+        email = credential['email']
+        password = credential['password']
+        row = database.execute(text("""
+            SELECT id, hashed_password FROM users WHERE email=:email
+        """), {"email": email}).fetchone()
+
+        if row and bcrypt.checkpw(password.encode('UTF-8'), row['hashed_password'].encode('UTF-8')):
+            user_id = row["id"]
+            payload = {
+                'user_id': user_id,
+                'exp': datetime.datetime.utcnow() + timedelta(seconds=60*60*24)
+            }
+            token = jwt.encode(payload, app.config['JWT_SECRET_KEY'], 'HS256')
+            return jsonify({'access_token': token.decode('UTF-8')})
+        else:
+            return '', 401
+
     @app.route("/sign-up", methods=["POST"])
+    @login_required
     def sign_up():
         new_user = request.json
+        new_user['password'] = bcrypt.hashpw(new_user['password'].encode('UTF-8'),
+                                             bcrypt.gensalt())
         new_user_id = insert_user(new_user)
         new_user = get_user(new_user_id)
         return jsonify(new_user)
 
     @app.route("/tweet", methods=["POST"])
+    @login_required
     def tweet():
         user_tweet = request.json
         tweet_str = user_tweet['tweet']
@@ -89,18 +142,21 @@ def create_app(test_config=None):
         return '', 200
 
     @app.route("/follow", methods=['POST'])
+    @login_required
     def follow():
         payload = request.json
         insert_follow(payload)
         return '', 200
 
     @app.route('/unfollow', methods=['POST'])
+    @login_required
     def unfollow():
         payload = request.json
         insert_unfollow(payload)
         return '', 200
 
     @app.route('/timeline/<int:user_id>', methods=['GET'])
+    @login_required
     def timeline(user_id):
         return jsonify({
             'user_id': user_id,
