@@ -102,7 +102,6 @@ def create_app(test_config=None):
         return "pong"
 
     @app.route("/login", methods=["POST"])
-    @login_required
     def login():
         credential = request.json
         email = credential['email']
