@@ -3,6 +3,16 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+
+class TokenData(BaseModel):
+    user_id: int
+    exp: datetime.datetime
+
+
 class UserBase(BaseModel):
     name: str
     email: str

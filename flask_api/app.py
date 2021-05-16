@@ -122,7 +122,6 @@ def create_app(test_config=None):
             return '', 401
 
     @app.route("/sign-up", methods=["POST"])
-    @login_required
     def sign_up():
         new_user = request.json
         new_user['password'] = bcrypt.hashpw(new_user['password'].encode('UTF-8'),
