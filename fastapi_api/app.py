@@ -6,7 +6,7 @@ import bcrypt
 import datetime
 from datetime import timedelta
 from typing import List
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -30,7 +30,7 @@ def create_app(test_config=None):
         "http://localhost:8080/"
     ]
     app = FastAPI()
-    oauth2_schema = OAuth2PasswordBearer(tokenUrl="token")
+    oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
     app.add_middleware(
         CORSMiddleware,
@@ -41,8 +41,29 @@ def create_app(test_config=None):
     )
     app.jwt_secret_key = "##!@ssddd###xc!!"
 
-    def decode_token(token):
-        return schema.User()
+    async def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)):
+        credentials_exception = HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        try:
+            payload = jwt.decode(token, app.jwt_secret_key, algorithms=["HS256"])
+            user_id: int = payload.get("user_id")
+            if user_id is None:
+                raise credentials_exception
+            # token_data = schema.TokenData(user_id=user_id)
+        except jwt.PyJWTError:
+            raise credentials_exception
+        user = crud.get_user(db, user_id)
+        if user is None:
+            raise credentials_exception
+        return user
+
+    async def get_current_active_user(current_user: schema.User = Depends(get_current_user)):
+        if current_user.disabled:
+            raise HTTPException(status_code=400, detail="Inactive user")
+        return current_user
 
     @app.get("/ping")
     async def pong():
@@ -77,8 +98,13 @@ def create_app(test_config=None):
         return {"access_token": token, "token_type": "bearer"}
 
     @app.post("/tweet", response_model=schema.Tweets)
-    async def tweet(tweet_body: schema.TweetsCreate, db: Session = Depends(get_db)):
+    async def tweet(tweet_body: schema.TweetsCreate, db: Session = Depends(get_db),
+                    user: schema.User = Depends(get_current_active_user)):
+        if not user:
+            raise HTTPException(status_code=401, detail="Not Authenticated")
         user_id = tweet_body.user_id
+        if user_id != user.id:
+            raise HTTPException(status_code=401, detail="Not Authenticated")
         tweet_str = tweet_body.tweet
         db_user = crud.get_user(db, user_id)
         if not db_user:
@@ -88,8 +114,13 @@ def create_app(test_config=None):
         return crud.insert_tweet(db, user_tweet=tweet_body)
 
     @app.post("/follow", response_model=schema.UserFollowList)
-    async def follow(follow_body: schema.UserFollowListCreate, db: Session = Depends(get_db)):
+    async def follow(follow_body: schema.UserFollowListCreate, db: Session = Depends(get_db),
+                     user: schema.User = Depends(get_current_active_user)):
+        if not user:
+            raise HTTPException(status_code=401, detail="Not Authenticated")
         user_id = follow_body.user_id
+        if user_id != user.id:
+            raise HTTPException(status_code=401, detail="Not Authenticated")
         follow_user_id = follow_body.follow_user
         target_user = crud.get_user(db, user_id)
         follow_user = crud.get_user(db, follow_user_id)
@@ -98,8 +129,13 @@ def create_app(test_config=None):
         return crud.insert_follow(db, follow_body)
 
     @app.post("/unfollow")
-    async def unfollow(follow_body: schema.UserFollowListCreate, db: Session = Depends(get_db)):
+    async def unfollow(follow_body: schema.UserFollowListCreate, db: Session = Depends(get_db),
+                       user: schema.User = Depends(get_current_active_user)):
+        if not user:
+            raise HTTPException(status_code=401, detail="Not Authenticated")
         user_id = follow_body.user_id
+        if user_id != user.id:
+            raise HTTPException(status_code=401, detail="Not Authenticated")
         follow_user_id = follow_body.follow_user
         target_user = crud.get_user(db, user_id)
         follow_user = crud.get_user(db, follow_user_id)
@@ -108,7 +144,12 @@ def create_app(test_config=None):
         return crud.insert_unfollow(db, follow_body)
 
     @app.get('/timeline/{user_id}')
-    async def timeline(user_id: int, db:Session = Depends(get_db)):
+    async def timeline(user_id: int, db:Session = Depends(get_db),
+                       user: schema.User = Depends(get_current_active_user)):
+        if not user:
+            raise HTTPException(status_code=401, detail="Not Authenticated")
+        if user_id != user.id:
+            raise HTTPException(status_code=401, detail="Not Authenticated")
         db_user = crud.get_user(db, user_id)
         if not db_user:
             raise HTTPException(status_code=400, detail="User is not exist")
